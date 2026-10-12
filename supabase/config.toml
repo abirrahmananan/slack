@@ -1,0 +1,5 @@
+project_id = "shoulder-slack"
+
+[functions.meta-capi]
+enabled = true
+verify_jwt = false

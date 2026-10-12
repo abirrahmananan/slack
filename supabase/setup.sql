@@ -24,6 +24,16 @@ create table if not exists public.site_settings (
   value text not null
 );
 
+create table if not exists public.meta_pixel_settings (
+  id smallint primary key default 1 check (id = 1),
+  enabled boolean not null default false,
+  pixel_id text not null default '',
+  capi_token text,
+  test_event_code text,
+  has_capi_token boolean generated always as (nullif(capi_token, '') is not null) stored,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.orders (
   id text primary key,
   customer_name text not null check (length(trim(customer_name)) > 0),
@@ -44,12 +54,17 @@ create table if not exists public.orders (
 alter table public.products enable row level security;
 alter table public.store_admins enable row level security;
 alter table public.site_settings enable row level security;
+alter table public.meta_pixel_settings enable row level security;
 alter table public.orders enable row level security;
 grant select on public.products to anon, authenticated;
 grant insert, update, delete on public.products to authenticated;
 grant select on public.store_admins to authenticated;
 grant select on public.site_settings to anon, authenticated;
 grant insert, update on public.site_settings to authenticated;
+revoke all on public.meta_pixel_settings from anon, authenticated;
+grant select (id, enabled, pixel_id, test_event_code, has_capi_token) on public.meta_pixel_settings to authenticated;
+grant insert (id, enabled, pixel_id, capi_token, test_event_code) on public.meta_pixel_settings to authenticated;
+grant update (enabled, pixel_id, capi_token, test_event_code, updated_at) on public.meta_pixel_settings to authenticated;
 revoke all on public.orders from anon, authenticated;
 grant insert (
   id, customer_name, phone, address, product_name, product_image,
@@ -108,6 +123,25 @@ create policy "Store admins can insert site settings"
 drop policy if exists "Store admins can update site settings" on public.site_settings;
 create policy "Store admins can update site settings"
   on public.site_settings for update
+  to authenticated
+  using (exists (select 1 from public.store_admins where user_id = auth.uid()))
+  with check (exists (select 1 from public.store_admins where user_id = auth.uid()));
+
+drop policy if exists "Store admins can read Meta Pixel settings" on public.meta_pixel_settings;
+create policy "Store admins can read Meta Pixel settings"
+  on public.meta_pixel_settings for select
+  to authenticated
+  using (exists (select 1 from public.store_admins where user_id = auth.uid()));
+
+drop policy if exists "Store admins can insert Meta Pixel settings" on public.meta_pixel_settings;
+create policy "Store admins can insert Meta Pixel settings"
+  on public.meta_pixel_settings for insert
+  to authenticated
+  with check (exists (select 1 from public.store_admins where user_id = auth.uid()));
+
+drop policy if exists "Store admins can update Meta Pixel settings" on public.meta_pixel_settings;
+create policy "Store admins can update Meta Pixel settings"
+  on public.meta_pixel_settings for update
   to authenticated
   using (exists (select 1 from public.store_admins where user_id = auth.uid()))
   with check (exists (select 1 from public.store_admins where user_id = auth.uid()));

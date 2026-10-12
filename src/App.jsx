@@ -1,6 +1,7 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import MetaPixelTracker from './components/MetaPixelTracker'
 import Home from './Pages/Home'
 import Wallet from './Pages/Wallet'
 import Tshirt from './Pages/Tshirt'
@@ -12,6 +13,7 @@ const App = () => {
 
   return (
     <>
+      <MetaPixelTracker />
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />

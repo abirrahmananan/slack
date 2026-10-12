@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { saveOrder } from "../utils/orders";
+import { trackMetaPurchase } from "../utils/metaPixel";
 
 const CodFrom = () => {
   const location = useLocation();
@@ -31,11 +32,12 @@ const CodFrom = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
     setOrderError("");
     setIsSubmitting(true);
     try {
-      await saveOrder({
+      const savedOrder = await saveOrder({
         customerName: formData.get("customerName"),
         phone: formData.get("phone"),
         address: formData.get("address"),
@@ -47,7 +49,10 @@ const CodFrom = () => {
         deliveryCharge,
         total,
       });
-      e.currentTarget.reset();
+      void trackMetaPurchase(savedOrder.id, savedOrder.total).catch((error) => {
+        console.error("Could not send the Meta Purchase event.", error);
+      });
+      form.reset();
       setOrderSuccess(true);
     } catch (error) {
       setOrderError(`Could not place your order: ${error.message}`);

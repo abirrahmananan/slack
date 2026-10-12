@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { getOrders, loadOrders, updateOrderStatus } from "../utils/orders";
 import { addProduct, deleteProduct, getProducts, loadProducts, updateProduct, uploadProductImage } from "../utils/products";
 import { getHeroImages, loadHeroImages, saveHeroImages } from "../utils/siteSettings";
+import { notifyMetaPixelSettingsChanged } from "../utils/metaPixel";
 import { supabase } from "../lib/supabase";
 
 const formatOrderDate = (createdAt) => {
@@ -33,6 +34,17 @@ const Admin = () => {
   const [heroImageError, setHeroImageError] = useState("");
   const [heroImageNotice, setHeroImageNotice] = useState("");
   const [isSavingHeroImage, setIsSavingHeroImage] = useState(false);
+  const [metaPixelSettings, setMetaPixelSettings] = useState({
+    enabled: false,
+    pixelId: "",
+    testEventCode: "",
+    capiToken: "",
+    hasCapiToken: false,
+  });
+  const [metaPixelError, setMetaPixelError] = useState("");
+  const [metaPixelNotice, setMetaPixelNotice] = useState("");
+  const [hasLoadedMetaPixelSettings, setHasLoadedMetaPixelSettings] = useState(false);
+  const [isSavingMetaPixel, setIsSavingMetaPixel] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -48,6 +60,38 @@ const Admin = () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || activeMenu !== "Meta Pixel+CAPI") return undefined;
+
+    let active = true;
+    supabase
+      .from("meta_pixel_settings")
+      .select("enabled,pixel_id,test_event_code,has_capi_token")
+      .eq("id", 1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        if (!active) return;
+        setMetaPixelSettings({
+          enabled: data?.enabled || false,
+          pixelId: data?.pixel_id || "",
+          testEventCode: data?.test_event_code || "",
+          capiToken: "",
+          hasCapiToken: data?.has_capi_token || false,
+        });
+      })
+      .catch((error) => {
+        if (active) setMetaPixelError(`Could not load Meta Pixel settings: ${error.message}`);
+      })
+      .finally(() => {
+        if (active) setHasLoadedMetaPixelSettings(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeMenu, isAuthenticated]);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -285,6 +329,83 @@ const Admin = () => {
     }
   };
 
+  const handleSaveMetaPixel = async (event) => {
+    event.preventDefault();
+    const pixelId = metaPixelSettings.pixelId.trim();
+    const capiToken = metaPixelSettings.capiToken.trim();
+    const testEventCode = metaPixelSettings.testEventCode.trim();
+
+    if (metaPixelSettings.enabled && !/^\d+$/.test(pixelId)) {
+      setMetaPixelError("Enter a valid numeric Meta Pixel ID before enabling tracking.");
+      return;
+    }
+    if (metaPixelSettings.enabled && !capiToken && !metaPixelSettings.hasCapiToken) {
+      setMetaPixelError("Enter a Conversions API access token before enabling tracking.");
+      return;
+    }
+    if (!supabase) {
+      setMetaPixelError("Supabase is not configured. Meta Pixel settings cannot be saved.");
+      return;
+    }
+
+    setMetaPixelError("");
+    setMetaPixelNotice("");
+    setIsSavingMetaPixel(true);
+    let privateSettingsSaved = false;
+    try {
+      const settings = {
+        enabled: metaPixelSettings.enabled,
+        pixel_id: pixelId,
+        test_event_code: testEventCode || null,
+        updated_at: new Date().toISOString(),
+      };
+      let result;
+
+      if (capiToken) {
+        result = await supabase
+          .from("meta_pixel_settings")
+          .upsert({ id: 1, ...settings, capi_token: capiToken });
+      } else if (metaPixelSettings.hasCapiToken) {
+        result = await supabase
+          .from("meta_pixel_settings")
+          .update(settings)
+          .eq("id", 1);
+      } else {
+        result = await supabase
+          .from("meta_pixel_settings")
+          .insert({ id: 1, ...settings, capi_token: null });
+      }
+      if (result.error) throw result.error;
+      privateSettingsSaved = true;
+      setMetaPixelSettings((current) => ({
+        ...current,
+        pixelId,
+        testEventCode,
+        capiToken: "",
+        hasCapiToken: current.hasCapiToken || Boolean(capiToken),
+      }));
+
+      const { error } = await supabase
+        .from("site_settings")
+        .upsert([
+          { key: "meta_pixel_enabled", value: String(metaPixelSettings.enabled) },
+          { key: "meta_pixel_id", value: pixelId },
+        ]);
+      if (error) throw error;
+
+      setMetaPixelNotice("Meta Pixel and Conversions API settings saved.");
+      notifyMetaPixelSettingsChanged();
+    } catch (error) {
+      setMetaPixelError(
+        privateSettingsSaved
+          ? `Private CAPI settings were saved, but the storefront Pixel settings could not be updated: ${error.message}`
+          : `Could not save Meta Pixel settings: ${error.message}`,
+      );
+    } finally {
+      setIsSavingMetaPixel(false);
+    }
+  };
+
   const handleLogin = async (event) => {
     event.preventDefault();
     if (!supabase) {
@@ -328,6 +449,7 @@ const Admin = () => {
     { name: "Customers", icon: "👥" },
     { name: "Add Product", icon: "➕" },
     { name: "Settings", icon: "⚙️" },
+    { name: "Meta Pixel+CAPI", icon: "📈" },
   ];
 
   if (!authChecked) {
@@ -1045,6 +1167,146 @@ const Admin = () => {
 
             </div>
 
+          </div>
+        )}
+
+        {activeMenu === "Meta Pixel+CAPI" && (
+          <div className="p-5 md:p-8">
+            <div className="mx-auto max-w-4xl rounded-2xl bg-white p-6 shadow-sm md:p-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-2xl font-bold">Meta Pixel + Conversions API</h3>
+                  <p className="mt-2 max-w-2xl text-sm text-gray-500">
+                    Configure tracking once. Page views are sent by the browser Pixel, and completed orders are sent
+                    through the Conversions API with matching event IDs for deduplication.
+                  </p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                  metaPixelSettings.enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
+                }`}>
+                  {metaPixelSettings.enabled ? "Tracking enabled" : "Tracking disabled"}
+                </span>
+              </div>
+
+              {!hasLoadedMetaPixelSettings ? (
+                <p className="mt-6 text-sm text-gray-500">Loading Meta Pixel settings...</p>
+              ) : (
+                <form onSubmit={handleSaveMetaPixel} className="mt-7 space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-[200px_1fr] sm:items-center">
+                    <label htmlFor="meta-pixel-type" className="text-sm font-medium text-gray-700">
+                      Type of Pixel
+                    </label>
+                    <select
+                      id="meta-pixel-type"
+                      value="meta-capi"
+                      disabled
+                      className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-gray-700"
+                    >
+                      <option value="meta-capi">Meta Pixel + Conversions API</option>
+                    </select>
+
+                    <label htmlFor="meta-pixel-id" className="text-sm font-medium text-gray-700">
+                      Pixel ID
+                    </label>
+                    <input
+                      id="meta-pixel-id"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={metaPixelSettings.pixelId}
+                      onChange={(event) => setMetaPixelSettings((current) => ({
+                        ...current,
+                        pixelId: event.target.value,
+                      }))}
+                      placeholder="e.g. 1234567890"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 outline-none focus:border-red-500"
+                    />
+
+                    <label htmlFor="meta-capi-token" className="text-sm font-medium text-gray-700">
+                      Conversions API Token
+                    </label>
+                    <div>
+                      <input
+                        id="meta-capi-token"
+                        type="password"
+                        autoComplete="new-password"
+                        value={metaPixelSettings.capiToken}
+                        onChange={(event) => setMetaPixelSettings((current) => ({
+                          ...current,
+                          capiToken: event.target.value,
+                        }))}
+                        placeholder={metaPixelSettings.hasCapiToken ? "Saved securely — leave blank to keep it" : "Paste your Meta access token"}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 outline-none focus:border-red-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        This token is stored in an admin-only table and is never sent to the browser Pixel.
+                      </p>
+                    </div>
+
+                    <label htmlFor="meta-test-event-code" className="text-sm font-medium text-gray-700">
+                      Test Event Code <span className="font-normal text-gray-400">(optional)</span>
+                    </label>
+                    <input
+                      id="meta-test-event-code"
+                      type="text"
+                      autoComplete="off"
+                      value={metaPixelSettings.testEventCode}
+                      onChange={(event) => setMetaPixelSettings((current) => ({
+                        ...current,
+                        testEventCode: event.target.value,
+                      }))}
+                      placeholder="e.g. TEST12345"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2.5 outline-none focus:border-red-500"
+                    />
+
+                    <label htmlFor="meta-excluded-pages" className="text-sm font-medium text-gray-700">
+                      Excluded Pages <span className="text-xs italic text-gray-400">(Premium only)</span>
+                    </label>
+                    <select
+                      id="meta-excluded-pages"
+                      disabled
+                      className="w-full cursor-not-allowed rounded-lg border border-gray-300 bg-gray-100 px-3 py-2.5 text-gray-500"
+                    >
+                      <option>All storefront pages are tracked</option>
+                    </select>
+                  </div>
+
+                  <label className="flex items-start gap-3 rounded-xl border border-gray-200 p-4">
+                    <input
+                      type="checkbox"
+                      checked={metaPixelSettings.enabled}
+                      onChange={(event) => setMetaPixelSettings((current) => ({
+                        ...current,
+                        enabled: event.target.checked,
+                      }))}
+                      className="mt-1 h-4 w-4 accent-red-600"
+                    />
+                    <span>
+                      <span className="block font-semibold text-gray-900">Enable Meta tracking</span>
+                      <span className="mt-1 block text-sm text-gray-500">
+                        Send PageView events from the Pixel and Purchase events from both the Pixel and CAPI.
+                      </span>
+                    </span>
+                  </label>
+
+                  <p className="text-sm italic leading-6 text-gray-500">
+                    Purchase events are sent only after an order has been saved. The browser and server use the same
+                    event ID so Meta can deduplicate them.
+                  </p>
+
+                  {metaPixelError && <p role="alert" className="text-sm text-red-600">{metaPixelError}</p>}
+                  {metaPixelNotice && <p role="status" className="text-sm text-green-700">{metaPixelNotice}</p>}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingMetaPixel}
+                    className="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {isSavingMetaPixel ? "Saving..." : "Save Meta Pixel Settings"}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         )}
 
