@@ -9,11 +9,15 @@ create table if not exists public.products (
   discount text,
   image text not null,
   stock integer not null default 0 check (stock >= 0),
+  delivery_charge numeric(10, 2) not null default 60 check (delivery_charge >= 0),
   created_at timestamptz not null default now()
 );
 
 alter table public.products
   add column if not exists back_image text;
+
+alter table public.products
+  add column if not exists delivery_charge numeric(10, 2) not null default 60 check (delivery_charge >= 0);
 
 create table if not exists public.store_admins (
   user_id uuid primary key references auth.users(id) on delete cascade
@@ -223,3 +227,5 @@ from (values
   ('Executive Leather Wallet', 'A refined leather wallet with a premium finish.', 'wallet', 'Wallet', 850, 1050, null, 'https://images.unsplash.com/photo-1611010344444-5f9e4d86a6e1?auto=format&fit=crop&w=800&q=80', 20)
 ) as seed(name, description, type, category, price, old_price, discount, image, stock)
 where not exists (select 1 from public.products);
+
+notify pgrst, 'reload schema';

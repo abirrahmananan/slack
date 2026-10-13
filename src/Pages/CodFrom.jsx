@@ -25,7 +25,9 @@ const CodFrom = () => {
     return () => window.clearTimeout(timeoutId);
   }, [orderSuccess]);
 
-  const deliveryCharge = 60;
+  const deliveryCharge = Number.isFinite(Number(product.deliveryCharge))
+    ? Math.max(0, Number(product.deliveryCharge))
+    : 60;
 
   const total = product.price * quantity + deliveryCharge;
 

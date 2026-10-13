@@ -12,6 +12,14 @@ const formatOrderDate = (createdAt) => {
     : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 };
 
+const getMetaPixelSettingsError = (error, action) => {
+  const message = error?.message || "Unknown Supabase error.";
+  if (error?.code === "PGRST205" || message.includes("meta_pixel_settings")) {
+    return `Supabase cannot find the Meta Pixel settings table. Run supabase/setup.sql in your Supabase Dashboard's SQL Editor, make sure it completes successfully, then refresh this page. The setup script also reloads the API schema cache. Details: ${message}`;
+  }
+  return `Could not ${action} Meta Pixel settings: ${message}`;
+};
+
 const Admin = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(!supabase);
@@ -82,7 +90,7 @@ const Admin = () => {
         });
       })
       .catch((error) => {
-        if (active) setMetaPixelError(`Could not load Meta Pixel settings: ${error.message}`);
+        if (active) setMetaPixelError(getMetaPixelSettingsError(error, "load"));
       })
       .finally(() => {
         if (active) setHasLoadedMetaPixelSettings(true);
@@ -237,12 +245,15 @@ const Admin = () => {
       const backImage = hasNewBackImage
         ? await uploadProductImage(backImageFile)
         : editingProduct?.backImage || null;
+      const deliveryChargeInput = String(formData.get("deliveryCharge") ?? "").trim();
+      const parsedDeliveryCharge = deliveryChargeInput === "" ? 60 : Number(deliveryChargeInput);
       const productData = {
         name: formData.get("name").trim(),
         type: formData.get("type"),
         category: formData.get("type") === "shirt" ? "T-Shirt" : "Wallet",
         price: Number(formData.get("price")),
         stock: Number(formData.get("stock")),
+        deliveryCharge: Number.isFinite(parsedDeliveryCharge) ? Math.max(0, parsedDeliveryCharge) : 60,
         description: formData.get("description").trim(),
         image,
         backImage,
@@ -399,7 +410,7 @@ const Admin = () => {
       setMetaPixelError(
         privateSettingsSaved
           ? `Private CAPI settings were saved, but the storefront Pixel settings could not be updated: ${error.message}`
-          : `Could not save Meta Pixel settings: ${error.message}`,
+          : getMetaPixelSettingsError(error, "save"),
       );
     } finally {
       setIsSavingMetaPixel(false);
@@ -912,6 +923,23 @@ const Admin = () => {
                     />
                   </div>
 
+                </div>
+
+                <div>
+                  <label htmlFor="product-delivery-charge" className="mb-2 block font-medium">
+                    Custom Delivery Charge
+                  </label>
+
+                  <input
+                    id="product-delivery-charge"
+                    type="number"
+                    name="deliveryCharge"
+                    placeholder="60"
+                    defaultValue={editingProduct?.deliveryCharge ?? 60}
+                    min="0"
+                    step="1"
+                    className="w-full rounded-xl border px-4 py-3 outline-none focus:border-red-500"
+                  />
                 </div>
 
                 <div>

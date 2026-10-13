@@ -14,6 +14,7 @@ export const defaultProducts = [
     category: "Anime",
     type: "shirt",
     stock: 20,
+    deliveryCharge: 60,
   },
   {
     id: "shirt-demon-slayer",
@@ -176,6 +177,7 @@ const fromDatabaseProduct = (row) => ({
   image: row.image,
   backImage: row.back_image,
   stock: row.stock,
+  deliveryCharge: row.delivery_charge === null || row.delivery_charge === undefined ? 60 : Number(row.delivery_charge),
 });
 
 const toDatabaseProduct = (product) => ({
@@ -189,6 +191,7 @@ const toDatabaseProduct = (product) => ({
   image: product.image,
   back_image: product.backImage ?? null,
   stock: product.stock,
+  delivery_charge: Number.isFinite(Number(product.deliveryCharge)) ? Number(product.deliveryCharge) : 60,
 });
 
 export const loadProducts = async () => {
