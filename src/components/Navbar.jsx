@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { useCart } from "../context/useCart";
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { itemCount } = useCart();
 
   return (
     <nav className="w-full bg-white border-b border-gray-200">
@@ -49,6 +51,11 @@ const Navbar = () => {
             </Link>
           </div>
 
+          <Link to="/cart" className="relative rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-800 transition hover:border-red-600 hover:text-red-600" aria-label={`Cart, ${itemCount} items`}>
+            Cart
+            <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs text-white">{itemCount}</span>
+          </Link>
+
           {/* Mobile Button */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
@@ -84,6 +91,13 @@ const Navbar = () => {
                 className="text-gray-700 font-medium"
               >
                 T-Shirt
+              </Link>
+              <Link
+                to="/cart"
+                onClick={() => setMenuOpen(false)}
+                className="text-gray-700 font-medium"
+              >
+                Cart ({itemCount})
               </Link>
             </div>
           </div>

@@ -1,22 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { saveOrder } from "../utils/orders";
+import { saveOrders } from "../utils/orders";
 import { trackMetaPurchase } from "../utils/metaPixel";
+import { useCart } from "../context/useCart";
 
 const CodFrom = () => {
   const location = useLocation();
-  const selectedProduct = location.state?.product;
-  const product = selectedProduct || {
+  const { clearCart } = useCart();
+  const selectedProduct = location.state?.product || {
     name: "Premium Oversized T-Shirt",
     price: 750,
     image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=300",
     type: "shirt",
   };
-  const [size, setSize] = useState("M");
-  const [quantity, setQuantity] = useState(1);
+  const [items, setItems] = useState(() => location.state?.items || [{
+    key: selectedProduct.id || selectedProduct.name,
+    product: selectedProduct,
+    size: location.state?.size || "M",
+    quantity: location.state?.quantity || 1,
+  }]);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderError, setOrderError] = useState("");
+  const isCartCheckout = Boolean(location.state?.fromCart);
 
   useEffect(() => {
     if (!orderSuccess) return undefined;
@@ -25,11 +31,13 @@ const CodFrom = () => {
     return () => window.clearTimeout(timeoutId);
   }, [orderSuccess]);
 
-  const deliveryCharge = Number.isFinite(Number(product.deliveryCharge))
-    ? Math.max(0, Number(product.deliveryCharge))
-    : 60;
-
-  const total = product.price * quantity + deliveryCharge;
+  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const deliveryCharge = items.length
+    ? Math.max(...items.map((item) => Number.isFinite(Number(item.product.deliveryCharge))
+      ? Math.max(0, Number(item.product.deliveryCharge))
+      : 60))
+    : 0;
+  const total = subtotal + deliveryCharge;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,21 +47,27 @@ const CodFrom = () => {
     setOrderError("");
     setIsSubmitting(true);
     try {
-      const savedOrder = await saveOrder({
-        customerName: formData.get("customerName"),
-        phone: formData.get("phone"),
-        address: formData.get("address"),
-        productName: product.name,
-        productImage: product.image,
-        quantity,
-        size: product.type === "shirt" ? size : null,
-        unitPrice: product.price,
-        deliveryCharge,
-        total,
+      const savedOrders = await saveOrders(items.map((item, index) => {
+        const itemDeliveryCharge = index === 0 ? deliveryCharge : 0;
+        return {
+          customerName: formData.get("customerName"),
+          phone: formData.get("phone"),
+          address: formData.get("address"),
+          productName: item.product.name,
+          productImage: item.product.image,
+          quantity: item.quantity,
+          size: item.product.type === "shirt" ? item.size : null,
+          unitPrice: item.product.price,
+          deliveryCharge: itemDeliveryCharge,
+          total: item.product.price * item.quantity + itemDeliveryCharge,
+        };
+      }));
+      savedOrders.forEach((savedOrder) => {
+        void trackMetaPurchase(savedOrder.id, savedOrder.total).catch((error) => {
+          console.error("Could not send the Meta Purchase event.", error);
+        });
       });
-      void trackMetaPurchase(savedOrder.id, savedOrder.total).catch((error) => {
-        console.error("Could not send the Meta Purchase event.", error);
-      });
+      if (isCartCheckout) clearCart();
       form.reset();
       setOrderSuccess(true);
     } catch (error) {
@@ -168,92 +182,74 @@ const CodFrom = () => {
             </h2>
 
 
-            {/* Product */}
-            <div className="flex gap-4 border-b border-gray-200 pb-5">
-
-              <img
-                src={product.image}
-                alt={product.name}
-                className="h-24 w-24 rounded-lg object-cover"
-              />
-
-              <div className="min-w-0 flex-1">
-
-                <h3 className="font-bold text-gray-900">
-                  {product.name}
-                </h3>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  ৳{product.price}
-                </p>
-
-                {/* Size */}
-                {product.type === "shirt" && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {["S", "M", "L", "XL", "XXL"].map((item) => (
-                      <button
-                        type="button"
-                        key={item}
-                        onClick={() => setSize(item)}
-                        className={`h-9 min-w-10 rounded-md border text-sm font-semibold transition ${
-                          size === item
-                            ? "border-black bg-black text-white"
-                            : "border-gray-300 hover:border-black"
-                        }`}
-                      >
-                        {item}
-                      </button>
-                    ))}
+            {items.map((item) => (
+              <div key={item.key} className="flex gap-4 border-b border-gray-200 py-5">
+                <img
+                  src={item.product.image}
+                  alt={item.product.name}
+                  className="h-20 w-20 rounded-lg object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-gray-900">{item.product.name}</h3>
+                  <p className="mt-1 text-sm text-gray-500">৳{item.product.price} each</p>
+                  {item.product.type === "shirt" && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {["S", "M", "L", "XL", "XXL"].map((option) => (
+                        <button
+                          type="button"
+                          key={option}
+                          onClick={() => setItems((currentItems) => currentItems.map((currentItem) =>
+                            currentItem.key === item.key ? { ...currentItem, size: option } : currentItem))}
+                          aria-pressed={item.size === option}
+                          className={`h-9 min-w-10 rounded-md border text-sm font-semibold transition ${
+                            item.size === option
+                              ? "border-black bg-black text-white"
+                              : "border-gray-300 hover:border-black"
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="text-sm font-semibold text-gray-700">Qty</span>
+                    <button
+                      type="button"
+                      onClick={() => setItems((currentItems) => currentItems.map((currentItem) =>
+                        currentItem.key === item.key
+                          ? { ...currentItem, quantity: Math.max(1, currentItem.quantity - 1) }
+                          : currentItem))}
+                      aria-label={`Decrease quantity of ${item.product.name}`}
+                      className="h-8 w-8 rounded-md border border-gray-300 text-lg hover:bg-gray-100"
+                    >
+                      -
+                    </button>
+                    <span className="w-6 text-center font-bold">{item.quantity}</span>
+                    <button
+                      type="button"
+                      onClick={() => setItems((currentItems) => currentItems.map((currentItem) =>
+                        currentItem.key === item.key
+                          ? { ...currentItem, quantity: currentItem.quantity + 1 }
+                          : currentItem))}
+                      aria-label={`Increase quantity of ${item.product.name}`}
+                      className="h-8 w-8 rounded-md border border-gray-300 text-lg hover:bg-gray-100"
+                    >
+                      +
+                    </button>
                   </div>
-                )}
-
+                </div>
+                <span className="font-semibold text-gray-900">৳{item.product.price * item.quantity}</span>
               </div>
-            </div>
-
-
-            {/* Quantity */}
-            <div className="flex items-center justify-between border-b border-gray-200 py-5">
-
-              <span className="font-semibold text-gray-700">
-                Quantity
-              </span>
-
-              <div className="flex items-center gap-3">
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setQuantity((q) => Math.max(1, q - 1))
-                  }
-                  aria-label="Decrease quantity"
-                  className="h-9 w-9 rounded-md border border-gray-300 text-lg hover:bg-gray-100"
-                >
-                  -
-                </button>
-
-                <span className="w-6 text-center font-bold">
-                  {quantity}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => setQuantity((q) => q + 1)}
-                  aria-label="Increase quantity"
-                  className="h-9 w-9 rounded-md border border-gray-300 text-lg hover:bg-gray-100"
-                >
-                  +
-                </button>
-
-              </div>
-            </div>
+            ))}
 
 
             {/* Price Details */}
             <div className="space-y-3 border-b border-gray-200 py-5">
 
               <div className="flex justify-between text-gray-600">
-                <span>Product Price</span>
-                <span>৳{product.price * quantity}</span>
+                <span>Product subtotal</span>
+                <span>৳{subtotal}</span>
               </div>
 
               <div className="flex justify-between text-gray-600">

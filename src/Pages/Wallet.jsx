@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getProducts, loadProducts } from "../utils/products";
 import ProductImage from "../components/ProductImage";
+import { useCart } from "../context/useCart";
 
 const Wallet = () => {
   const navigate = useNavigate();
+  const { addToCart } = useCart();
   const [wallets, setWallets] = useState(() => getProducts().filter((product) => product.type === "wallet"));
 
   useEffect(() => {
@@ -67,9 +69,9 @@ const Wallet = () => {
             {/* Content */}
             <div className="min-w-0 p-3 sm:p-5">
 
-              <h2 className="break-words text-base font-bold text-gray-900 sm:text-xl">
+              <Link to={`/product/${wallet.id}`} className="block break-words text-base font-bold text-gray-900 hover:text-red-600 sm:text-xl">
                 {wallet.name}
-              </h2>
+              </Link>
 
               <p className="mt-2 line-clamp-3 min-h-12 text-xs leading-4 text-gray-500 sm:text-sm sm:leading-6">
                 {wallet.description}
@@ -98,6 +100,19 @@ const Wallet = () => {
               </div>
 
               {/* Button */}
+              <Link
+                to={`/product/${wallet.id}`}
+                className="mt-4 block w-full rounded-lg border border-gray-300 px-2 py-2.5 text-center text-sm font-bold text-gray-900 transition hover:border-red-600 hover:text-red-600 sm:mt-5 sm:rounded-xl sm:px-5 sm:py-3 sm:text-base"
+              >
+                View Details
+              </Link>
+              <button
+                type="button"
+                onClick={() => addToCart(wallet)}
+                className="mt-2 w-full rounded-lg border border-black px-2 py-2.5 text-sm font-bold text-black transition hover:bg-gray-100 sm:rounded-xl sm:px-5 sm:py-3 sm:text-base"
+              >
+                Add to Cart
+              </button>
               <button
                 onClick={() => navigate("/cod-from", { state: { product: { ...wallet, type: "wallet" } } })}
                 className="mt-4 w-full rounded-lg bg-black px-2 py-2.5 text-sm font-bold text-white transition duration-300 hover:bg-red-600 sm:mt-5 sm:rounded-xl sm:px-5 sm:py-3 sm:text-base"

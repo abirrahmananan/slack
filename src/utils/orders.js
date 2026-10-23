@@ -38,37 +38,40 @@ export const loadOrders = async () => {
   return data.map(mapOrder);
 };
 
-export const saveOrder = async (order) => {
-  const savedOrder = {
+export const saveOrders = async (orderItems) => {
+  const createdAt = new Date().toISOString();
+  const savedOrders = orderItems.map((order) => ({
     ...order,
     id: `ORD-${crypto.randomUUID()}`,
     status: "Pending",
-    createdAt: new Date().toISOString(),
-  };
+    createdAt,
+  }));
 
   if (supabase) {
-    const { error } = await supabase.from("orders").insert({
-      id: savedOrder.id,
-      customer_name: savedOrder.customerName,
-      phone: savedOrder.phone,
-      address: savedOrder.address,
-      product_name: savedOrder.productName,
-      product_image: savedOrder.productImage,
-      quantity: savedOrder.quantity,
-      size: savedOrder.size,
-      unit_price: savedOrder.unitPrice,
-      delivery_charge: savedOrder.deliveryCharge,
-      total: savedOrder.total,
-    });
+    const { error } = await supabase.from("orders").insert(savedOrders.map((order) => ({
+      id: order.id,
+      customer_name: order.customerName,
+      phone: order.phone,
+      address: order.address,
+      product_name: order.productName,
+      product_image: order.productImage,
+      quantity: order.quantity,
+      size: order.size,
+      unit_price: order.unitPrice,
+      delivery_charge: order.deliveryCharge,
+      total: order.total,
+    })));
 
     if (error) throw error;
   } else {
     const orders = getOrders();
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([savedOrder, ...orders]));
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([...savedOrders, ...orders]));
   }
 
-  return savedOrder;
+  return savedOrders;
 };
+
+export const saveOrder = async (order) => (await saveOrders([order]))[0];
 
 export const updateOrderStatus = async (orderId, status) => {
   if (supabase) {

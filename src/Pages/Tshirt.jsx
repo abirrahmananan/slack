@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getProducts, loadProducts } from "../utils/products";
 import ProductImage from "../components/ProductImage";
+import { useCart } from "../context/useCart";
 
 const TShirt = () => {
   const navigate = useNavigate();
+  const { addToCart } = useCart();
   const [products, setProducts] = useState(() => getProducts().filter((product) => product.type === "shirt"));
 
   useEffect(() => {
@@ -225,9 +227,9 @@ const TShirt = () => {
 
                   {/* Quick View */}
                   <div className="absolute bottom-0 left-0 right-0 translate-y-full bg-black/80 p-3 transition duration-300 group-hover:translate-y-0">
-                    <button className="w-full rounded-lg bg-white py-2.5 text-sm font-bold text-black">
+                    <Link to={`/product/${product.id}`} className="block w-full rounded-lg bg-white py-2.5 text-center text-sm font-bold text-black">
                       Quick View
-                    </button>
+                    </Link>
                   </div>
                 </div>
 
@@ -244,9 +246,9 @@ const TShirt = () => {
                     </span>
                   </div>
 
-                  <h3 className="break-words text-base font-bold text-gray-900 sm:text-xl">
+                  <Link to={`/product/${product.id}`} className="block break-words text-base font-bold text-gray-900 hover:text-red-600 sm:text-xl">
                     {product.name}
-                  </h3>
+                  </Link>
 
                   <p className="mt-2 min-h-12 line-clamp-3 text-xs leading-4 text-gray-500 sm:text-sm sm:leading-6">
                     {product.description}
@@ -280,6 +282,19 @@ const TShirt = () => {
                   </div>
 
                   {/* Order */}
+                  <Link
+                    to={`/product/${product.id}`}
+                    className="mt-4 block w-full rounded-lg border border-gray-300 px-2 py-2.5 text-center text-sm font-bold text-gray-900 transition hover:border-red-600 hover:text-red-600 sm:mt-5 sm:rounded-xl sm:px-5 sm:py-3.5 sm:text-base"
+                  >
+                    View Details
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(product, "M")}
+                    className="mt-2 w-full rounded-lg border border-black px-2 py-2.5 text-sm font-bold text-black transition hover:bg-gray-100 sm:rounded-xl sm:px-5 sm:py-3.5 sm:text-base"
+                  >
+                    Add to Cart (M)
+                  </button>
                   <button onClick={() => openCheckout(product)} className="mt-4 w-full rounded-lg bg-black px-2 py-2.5 text-sm font-bold text-white transition hover:bg-red-600 sm:mt-5 sm:rounded-xl sm:px-5 sm:py-3.5 sm:text-base">
                     Order Now
                   </button>
